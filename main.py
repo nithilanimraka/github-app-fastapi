@@ -1,78 +1,54 @@
 import os
-import time
-import jwt
-import httpx
-from fastapi import FastAPI, Request, HTTPException
+import hmac
+import hashlib
+import json
+from fastapi import FastAPI, Request, HTTPException, Header
 from dotenv import load_dotenv
-
-load_dotenv()
+from github import Github, GithubIntegration
 
 app = FastAPI()
+load_dotenv()
 
-# Configuration
-APP_ID = os.getenv("APP_ID")
-# WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-PRIVATE_KEY_PATH = "app.pem"
+APP_ID = os.environ.get("APP_ID")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
+PRIVATE_KEY_PATH = os.environ.get("PRIVATE_KEY_PATH")
 
-# Load private key
-with open(PRIVATE_KEY_PATH, "r") as f:
-    PRIVATE_KEY = f.read()
+with open(PRIVATE_KEY_PATH) as fin:
+    private_key = fin.read()
 
-async def create_github_jwt():
-    now = int(time.time())
-    payload = {
-        "iat": now,
-        "exp": now + (10 * 60),  # 10 minutes
-        "iss": APP_ID
-    }
-    return jwt.encode(payload, PRIVATE_KEY, algorithm="RS256")
+github_integration = GithubIntegration(APP_ID, private_key)
 
-async def get_installation_token(installation_id: int):
-    jwt_token = await create_github_jwt()
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-            headers={
-                "Authorization": f"Bearer {jwt_token}",
-                "Accept": "application/vnd.github.v3+json"
-            }
-        )
-        response.raise_for_status()
-        return response.json()["token"]
+def generate_hash_signature(secret: bytes, payload: bytes, digest_method=hashlib.sha1):
+    return hmac.new(secret, payload, digest_method).hexdigest()
+
+def verify_signature(payload: bytes, x_hub_signature: str):
+    secret = WEBHOOK_SECRET.encode("utf-8")
+    expected_signature = f"sha1={generate_hash_signature(secret, payload)}"
+    if not hmac.compare_digest(expected_signature, x_hub_signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+
+def connect_repo(owner: str, repo_name: str):
+    installation_id = github_integration.get_installation(owner, repo_name).id
+    access_token = github_integration.get_access_token(installation_id).token
+    return Github(login_or_token=access_token).get_repo(f"{owner}/{repo_name}")
 
 @app.post("/webhook")
-async def handle_webhook(request: Request):
-    # Verify signature
-    body = await request.body()
-    signature = request.headers.get("x-hub-signature-256", "").split("sha256=")[-1]
-    expected_signature = jwt.encode({"data": body}, algorithm="HS256")
+async def webhook(request: Request, x_hub_signature: str = Header(None)):
+    payload = await request.body()
+    verify_signature(payload, x_hub_signature)
+    payload_dict = json.loads(payload)
+    #print("Payload:", payload_dict)
     
-    if not jwt.compare_digest(signature, expected_signature):
-        raise HTTPException(status_code=401, detail="Invalid signature")
-
-    # Process event
-    event = request.headers.get("x-github-event")
-    payload = await request.json()
-
-    if event == "pull_request" and payload["action"] == "opened":
-        installation_id = payload["installation"]["id"]
-        repo = payload["repository"]
-        pr_number = payload["pull_request"]["number"]
+    if "repository" in payload_dict:
+        owner = payload_dict["repository"]["owner"]["login"]
+        repo_name = payload_dict["repository"]["name"]
+        repo = connect_repo(owner, repo_name)
         
-        # Get access token
-        access_token = await get_installation_token(installation_id)
-        
-        # Post comment
-        comment_url = f"https://api.github.com/repos/{repo['owner']['login']}/{repo['name']}/issues/{pr_number}/comments"
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                comment_url,
-                json={"body": "Hello World!"},
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json"
-                }
+        # Check if it's a pull_request event with action 'opened'
+        if payload_dict.get("pull_request") and payload_dict.get("action") == "opened":
+            pr_number = payload_dict["pull_request"]["number"]
+            issue = repo.get_issue(number=pr_number)
+            issue.create_comment(
+                "Thanks for opening a new PR! Please follow our contributing guidelines to make your PR easier to review."
             )
-            response.raise_for_status()
-    
-    return {"status": "processed"}
+    return {}
