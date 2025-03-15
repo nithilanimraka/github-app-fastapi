@@ -35,9 +35,7 @@ def analyze_code_changes(diff_content: str) -> List[Dict]:
         input=[
             {"role": "system", "content": "You are an experienced code reviewer."},
             {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=2000
+        ]
     )
 
     # Parse and format the response
