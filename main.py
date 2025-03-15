@@ -5,6 +5,7 @@ import json
 from fastapi import FastAPI, Request, HTTPException, Header
 from dotenv import load_dotenv
 from github import Github, GithubIntegration
+import requests
 
 app = FastAPI()
 load_dotenv()
@@ -47,6 +48,13 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
         # Check if it's a pull_request event with action 'opened'
         if payload_dict.get("pull_request") and payload_dict.get("action") == "opened":
             pr_number = payload_dict["pull_request"]["number"]
+
+            #newly added to get pull request diff
+            pull_request = repo.get_pull(pr_number)
+            diff_url = pull_request.diff_url
+            response = requests.get(diff_url)
+            print(response.text)
+
             issue = repo.get_issue(number=pr_number)
             issue.create_comment(
                 "Thanks for opening a new PR! Please follow our contributing guidelines to make your PR easier to review."
