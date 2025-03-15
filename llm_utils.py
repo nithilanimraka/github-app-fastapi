@@ -1,9 +1,18 @@
 import os
 from openai import OpenAI
 from typing import List, Dict
-from dotenv import load_dotenv
+from pydantic import BaseModel
 
-client = OpenAI()
+
+api_key = os.environ.get('OPENAI_API_KEY')
+
+client = OpenAI(api_key=api_key)
+
+class ReviewModel(BaseModel):
+    fileName: list[str]
+    codeSegmentToFix: list[str]
+    comment: list[str]
+    suggestion: list[str]
 
 
 def analyze_code_changes(diff_content: str) -> List[Dict]:
@@ -11,10 +20,6 @@ def analyze_code_changes(diff_content: str) -> List[Dict]:
     Analyze code changes using OpenAI's GPT model
     Returns a list of review comments
     """
-
-    load_dotenv()
-    
-    # openai.api_key = os.environ.get('OPENAI_API_KEY')
 
     # Prepare the prompt for the LLM
     prompt = f"""
@@ -30,13 +35,14 @@ def analyze_code_changes(diff_content: str) -> List[Dict]:
     """
 
     # Get analysis from OpenAI
-    response = client.responses.create(
-        model="gpt-4o",
-        input=[
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
             {"role": "system", "content": "You are an experienced code reviewer."},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        response_format=ReviewModel,
     )
 
     # Parse and format the response
-    return (response.choices[0].message.content)
+    return (completion.choices[0].message.parsed)
