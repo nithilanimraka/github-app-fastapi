@@ -56,12 +56,35 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
             response = requests.get(diff_url)
             #print(response.text)
 
-            # Analyze the code changes
-            review_comments = analyze_code_changes(response.text)
-            print(review_comments)
+            print("Before llm call...")
 
             issue = repo.get_issue(number=pr_number)
             issue.create_comment(
                 "Thanks for opening a new PR! Please follow our contributing guidelines to make your PR easier to review."
             )
+
+            # Analyze the code changes
+            review_list= analyze_code_changes(response.text)
+
+            # Post each review item as a comment on the PR
+            for review in review_list:
+                comment_body = (
+                    f"**File:** `{review['fileName']}`\n"
+                    f"**Code Segment:**\n```\n{review['codeSegmentToFix']}\n```\n"
+                    f"**Issue:** {review['comment']}\n"
+                    f"**Severity:** {review['severity']}\n"
+                    f"**Suggestion:** {review['suggestion']}\n"
+                )
+                
+                # If suggestedCode exists, add it to the comment
+                if review.get("suggestedCode"):
+                    comment_body += f"```suggestion\n{review['suggestedCode']}\n```"
+
+                issue.create_comment(comment_body)
+
+            # print(review_comments)
+
+            print("After llm call...")
+
+            
     return {}
