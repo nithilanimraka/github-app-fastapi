@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from github import Github, GithubIntegration
 import requests
 
+from llm_utils import analyze_code_changes
+
 app = FastAPI()
 load_dotenv()
 
@@ -38,7 +40,6 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
     payload = await request.body()
     verify_signature(payload, x_hub_signature)
     payload_dict = json.loads(payload)
-    #print("Payload:", payload_dict)
     
     if "repository" in payload_dict:
         owner = payload_dict["repository"]["owner"]["login"]
@@ -53,7 +54,11 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
             pull_request = repo.get_pull(pr_number)
             diff_url = pull_request.diff_url
             response = requests.get(diff_url)
-            print(response.text)
+            #print(response.text)
+
+            # Analyze the code changes
+            review_comments = analyze_code_changes(response.text)
+            print(review_comments)
 
             issue = repo.get_issue(number=pr_number)
             issue.create_comment(
