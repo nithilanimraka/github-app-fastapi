@@ -12,7 +12,7 @@ class ReviewModel(BaseModel):
     class Step(BaseModel):
         fileName: str = Field(description="The name of the file that has an issue")
         language: str = Field(description="The language of the code segment")
-        codeSegmentToFix: str = Field(description="The code segment that needs to be fixed from code diff in diff style('+' for added, '-' for removed)")
+        codeSegmentToFix: str = Field(description="The code segment that needs to be fixed from code diff in diff style('+' for added, '-' for removed, or nothing for normal code)")
         comment: str = Field(description="The comment on the code segment")
         suggestion: str = Field(description="The suggestion to fix the code segment")
         suggestedCode: Optional[str] = Field(None, description="The updated code segment for the fix")
@@ -36,10 +36,9 @@ def analyze_code_changes(diff_content: str) -> List[Dict]:
 
     Important:
     - Provide insights in the comment section for each code segment. Provide improvements in suggestions when necessary.
-    - Always output the code segment to fix in the diff format (e.g., '+ added code', '- removed code').
-    - Ensure that you provide all the necessary code lines in the code segment to fix.
-    - If there are multiple comments in the same code segment, provide the comments seperated by commas.
-    
+    - Always output the code segment to fix in the diff format (e.g., '+ added code', '- removed code', 'or nothing for normal code').
+    - Ensure that you provide all the necessary code lines in the codeSegmentToFix field.
+    - If there are multiple comments for the same code segment, provide the comments separated by commas.
 
     Diff content:
     {diff_content}
