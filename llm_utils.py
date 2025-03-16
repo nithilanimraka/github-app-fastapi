@@ -37,7 +37,8 @@ def analyze_code_changes(diff_content: str) -> List[Dict]:
     Important:
     - Provide insights in the comment section for each code segment. Provide improvements in suggestions when necessary.
     - Always output the code segment to fix in the diff format (e.g., '+ added code', '- removed code').
-    - If there are multiple issues in the same code segment, provide the comments seperated by commas.
+    - Ensure that you provide all the necessary code lines in the code segment to fix.
+    - If there are multiple comments in the same code segment, provide the comments seperated by commas.
     
 
     Diff content:
