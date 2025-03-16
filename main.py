@@ -60,7 +60,7 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
 
             issue = repo.get_issue(number=pr_number)
             issue.create_comment(
-                "Thanks for opening a new PR! Please follow our contributing guidelines to make your PR easier to review."
+                "Hi, I am a code reviewer bot. I will analyze the PR and provide detailed review comments."
             )
 
             # Analyze the code changes
@@ -68,19 +68,26 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
 
             # Post each review item as a comment on the PR
             for review in review_list:
+
+                prog_lang = review.get('language', '')  # Default to an empty string if 'language' is missing
                 comment_body = (
-                    f"**File:** `{review['fileName']}`\n"
-                    f"**Code Segment:**\n```\n{review['codeSegmentToFix']}\n```\n"
-                    f"**Issue:** {review['comment']}\n"
-                    f"**Severity:** {review['severity']}\n"
+                    f"**File:** `{review['fileName']}`\n\n"
+                    f"**Code Segment:**\n```diff\n{review['codeSegmentToFix']}\n```\n"
+                    f"**Issue:** {review['comment']}\n\n"
+                    f"**Severity:** {review['severity']}\n\n"
                     f"**Suggestion:** {review['suggestion']}\n"
                 )
                 
                 # If suggestedCode exists, add it to the comment
                 if review.get("suggestedCode"):
-                    comment_body += f"```suggestion\n{review['suggestedCode']}\n```"
+                    comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
 
-                issue.create_comment(comment_body)
+                try:
+                    res = issue.create_comment(comment_body)
+                    if not res:
+                        print("Failed to create comment on the issue.")
+                except Exception as e:
+                    print(f"Error when commenting on issue: {e}")
 
             # print(review_comments)
 
