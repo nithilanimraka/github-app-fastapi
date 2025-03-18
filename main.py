@@ -51,6 +51,7 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
         if payload_dict.get("pull_request") and payload_dict.get("action") == "opened":
             pr_number = payload_dict["pull_request"]["number"]
             head_sha = payload_dict['pull_request']['head']['sha']
+            print(head_sha)
             
             check_run = None  # Initialize outside try block
 
@@ -76,8 +77,12 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     "Hi, I am a code reviewer bot. I will analyze the PR and provide detailed review comments."
                 )
 
+                print("After issue comment...")
+
                 # Analyze code changes (your existing function)
                 review_list = analyze_code_changes(structured_diff_text)
+
+                print("After llm call 1...")
                 
                 # Update check run with results
                 update_check_run(
@@ -85,6 +90,8 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     results=review_list
                 )
                 
+                print("After update check run...")
+
                 # Post each review item as a comment on the PR
                 for review in review_list:
 
@@ -92,9 +99,6 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
 
                     prog_lang = review.get('language', '')  # Default to an empty string if 'language' is missing
                     comment_body = (
-                        f"**File:** `{review['fileName']}`\n\n"
-                        f"Comments on lines `{review['start_line_with_prefix']}` to `{review['end_line_with_prefix']}`\n"
-                        f"```diff\n{review['codeSegmentToFix']}\n```\n"
                         f"**Issue:** {review['comment']}\n\n"
                         f"**Severity:** {review['severity']}\n\n"
                         f"**Suggestion:** {review['suggestion']}\n"
@@ -104,12 +108,23 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     if review.get("suggestedCode"):
                         comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
 
+                    print("just before new code")
                     try:
-                        res = issue.create_comment(comment_body)
-                        if not res:
-                            print("Failed to create comment on the issue.")
+                        pull_request.create_review_comment(
+                        body=comment_body,
+                        commit=repo.get_commit(head_sha),
+                        path=review['fileName'],
+                        start_line=review['start_line'],
+                        line=review['end_line'],
+                        start_side="RIGHT",  # 'RIGHT' indicates the new file
+                        side="RIGHT",  # 'RIGHT' indicates the new file
+                        )
                     except Exception as e:
-                        print(f"Error when commenting on issue: {e}")
+                        print(f"Failed to post comments: {str(e)}")
+                        if hasattr(e, 'data'):
+                            print("Error details:", json.dumps(e.data, indent=2))
+                        else:
+                            print("No valid comments to post")
                     
             except Exception as e:
                 # Only update check run if it was successfully created
