@@ -107,15 +107,15 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                         comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
 
                     #Check whether the start_line and end_line are from new file or old file
-                    if(review['start_line_with_prefix'][0]=='+'): 
-                        var_startSide = "RIGHT"
-                    elif(review['start_line_with_prefix'][0]=='-'):
+                    if(review['start_line_with_prefix'][0]=='-'): 
                         var_startSide = "LEFT"
+                    else:
+                        var_startSide = "RIGHT"
     
-                    if(review['end_line_with_prefix'][0]=='+'):
-                        var_side = "RIGHT"
-                    elif(review['end_line_with_prefix'][0]=='-'):
+                    if(review['end_line_with_prefix'][0]=='-'):
                         var_side = "LEFT"
+                    else:
+                        var_side = "RIGHT"
 
                     if(review['start_line'] != review['end_line']):
                         try:
