@@ -8,6 +8,7 @@ from github import Github, GithubIntegration
 import requests
 
 from llm_utils import analyze_code_changes
+from github_utils import create_check_run, update_check_run, parse_diff_file_line_numbers, build_review_prompt_with_file_line_numbers
 
 app = FastAPI()
 load_dotenv()
@@ -49,47 +50,83 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
         # Check if it's a pull_request event with action 'opened'
         if payload_dict.get("pull_request") and payload_dict.get("action") == "opened":
             pr_number = payload_dict["pull_request"]["number"]
+            head_sha = payload_dict['pull_request']['head']['sha']
+            
+            check_run = None  # Initialize outside try block
 
-            #newly added to get pull request diff
-            pull_request = repo.get_pull(pr_number)
-            diff_url = pull_request.diff_url
-            response = requests.get(diff_url)
-            #print(response.text)
+            try:
+                # Create initial check run
+                check_run = create_check_run(repo, head_sha)
+                
+                #newly added to get pull request diff
+                pull_request = repo.get_pull(pr_number)
+                diff_url = pull_request.diff_url
+                response = requests.get(diff_url)
 
-            print("Before llm call...")
+                # Parse the diff to extract actual file line numbers.
+                parsed_files = parse_diff_file_line_numbers(response.text)
+    
+                # Build a structured diff text for the prompt.
+                structured_diff_text = build_review_prompt_with_file_line_numbers(parsed_files)
 
-            issue = repo.get_issue(number=pr_number)
-            issue.create_comment(
-                "Hi, I am a code reviewer bot. I will analyze the PR and provide detailed review comments."
-            )
+                print("Before llm call...")
 
-            # Analyze the code changes
-            review_list= analyze_code_changes(response.text)
+                issue = repo.get_issue(number=pr_number)
+                issue.create_comment(
+                    "Hi, I am a code reviewer bot. I will analyze the PR and provide detailed review comments."
+                )
 
-            # Post each review item as a comment on the PR
-            for review in review_list:
-
-                prog_lang = review.get('language', '')  # Default to an empty string if 'language' is missing
-                comment_body = (
-                    f"**File:** `{review['fileName']}`\n\n"
-                    f"**Code Segment:**\n```diff\n{review['codeSegmentToFix']}\n```\n"
-                    f"**Issue:** {review['comment']}\n\n"
-                    f"**Severity:** {review['severity']}\n\n"
-                    f"**Suggestion:** {review['suggestion']}\n"
+                # Analyze code changes (your existing function)
+                review_list = analyze_code_changes(structured_diff_text)
+                
+                # Update check run with results
+                update_check_run(
+                    check_run=check_run,
+                    results=review_list
                 )
                 
-                # If suggestedCode exists, add it to the comment
-                if review.get("suggestedCode"):
-                    comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
+                # Post each review item as a comment on the PR
+                for review in review_list:
 
-                try:
-                    res = issue.create_comment(comment_body)
-                    if not res:
-                        print("Failed to create comment on the issue.")
-                except Exception as e:
-                    print(f"Error when commenting on issue: {e}")
+                    print(review)
 
-            # print(review_comments)
+                    prog_lang = review.get('language', '')  # Default to an empty string if 'language' is missing
+                    comment_body = (
+                        f"**File:** `{review['fileName']}`\n\n"
+                        f"Comments on lines `{review['start_line_with_prefix']}` to `{review['end_line_with_prefix']}`\n"
+                        f"```diff\n{review['codeSegmentToFix']}\n```\n"
+                        f"**Issue:** {review['comment']}\n\n"
+                        f"**Severity:** {review['severity']}\n\n"
+                        f"**Suggestion:** {review['suggestion']}\n"
+                    )
+                    
+                    # If suggestedCode exists, add it to the comment
+                    if review.get("suggestedCode"):
+                        comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
+
+                    try:
+                        res = issue.create_comment(comment_body)
+                        if not res:
+                            print("Failed to create comment on the issue.")
+                    except Exception as e:
+                        print(f"Error when commenting on issue: {e}")
+                    
+            except Exception as e:
+                # Only update check run if it was successfully created
+                if check_run is not None:
+                    check_run.edit(
+                        status="completed",
+                        conclusion="failure",
+                        output={
+                            "title": "Analysis Failed",
+                            "summary": f"Error: {str(e)}"
+                        }
+                    )
+                else:
+                    # Fallback error handling
+                    print(f"Critical failure before check run creation: {str(e)}")
+                    
+                raise
 
             print("After llm call...")
 
