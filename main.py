@@ -69,6 +69,7 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
     
                 # Build a structured diff text for the prompt.
                 structured_diff_text = build_review_prompt_with_file_line_numbers(parsed_files)
+                print(structured_diff_text)
 
                 print("Before llm call...")
 
@@ -77,25 +78,22 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     "Hi, I am a code reviewer bot. I will analyze the PR and provide detailed review comments."
                 )
 
-                print("After issue comment...")
-
                 # Analyze code changes (your existing function)
                 review_list = analyze_code_changes(structured_diff_text)
 
-                print("After llm call 1...")
+                print("After llm call ...")
                 
                 # Update check run with results
                 update_check_run(
                     check_run=check_run,
                     results=review_list
                 )
-                
-                print("After update check run...")
 
                 # Post each review item as a comment on the PR
                 for review in review_list:
-
+                    print("\n")
                     print(review)
+
 
                     prog_lang = review.get('language', '')  # Default to an empty string if 'language' is missing
                     comment_body = (
@@ -108,23 +106,51 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     if review.get("suggestedCode"):
                         comment_body += f"```{prog_lang}\n{review['suggestedCode']}\n```"
 
-                    print("just before new code")
-                    try:
-                        pull_request.create_review_comment(
-                        body=comment_body,
-                        commit=repo.get_commit(head_sha),
-                        path=review['fileName'],
-                        start_line=review['start_line'],
-                        line=review['end_line'],
-                        start_side="RIGHT",  # 'RIGHT' indicates the new file
-                        side="RIGHT",  # 'RIGHT' indicates the new file
-                        )
-                    except Exception as e:
-                        print(f"Failed to post comments: {str(e)}")
-                        if hasattr(e, 'data'):
-                            print("Error details:", json.dumps(e.data, indent=2))
-                        else:
-                            print("No valid comments to post")
+                    #Check whether the start_line and end_line are from new file or old file
+                    if(review['start_line_with_prefix'][0]=='+'): 
+                        var_startSide = "RIGHT"
+                    elif(review['start_line_with_prefix'][0]=='-'):
+                        var_startSide = "LEFT"
+    
+                    if(review['end_line_with_prefix'][0]=='+'):
+                        var_side = "RIGHT"
+                    elif(review['end_line_with_prefix'][0]=='-'):
+                        var_side = "LEFT"
+
+                    if(review['start_line'] != review['end_line']):
+                        try:
+                            pull_request.create_review_comment(
+                            body=comment_body,
+                            commit=repo.get_commit(head_sha),
+                            path=review['fileName'],
+                            start_line=review['start_line'], #line number of the starting line of the code block
+                            line=review['end_line'], #line number of the ending line of the code block
+                            start_side=var_startSide,  #side of the starting line of the code block
+                            side=var_side,  # side of the ending line of the code block
+                            )
+                        except Exception as e:
+                            print(f"Failed to post comments: {str(e)}")
+                            if hasattr(e, 'data'):
+                                print("Error details:", json.dumps(e.data, indent=2))
+                            else:
+                                print("No valid comments to post")
+
+                    else:
+                        try:
+                            pull_request.create_review_comment(
+                            body=comment_body,
+                            commit=repo.get_commit(head_sha),
+                            path=review['fileName'],
+                            line=review['end_line'],
+                            side=var_side, 
+                            )
+                        except Exception as e:
+                            print(f"Failed to post comments: {str(e)}")
+                            if hasattr(e, 'data'):
+                                print("Error details:", json.dumps(e.data, indent=2))
+                            else:
+                                print("No valid comments to post")
+
                     
             except Exception as e:
                 # Only update check run if it was successfully created
@@ -142,8 +168,6 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                     print(f"Critical failure before check run creation: {str(e)}")
                     
                 raise
-
-            print("After llm call...")
 
             
     return {}

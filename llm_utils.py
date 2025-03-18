@@ -62,6 +62,8 @@ def analyze_code_changes(structured_diff_text: str) -> List[Dict]:
     {structured_diff_text}
     """
 
+    print("Before API CALL...")
+
     # Get analysis from OpenAI
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-2024-08-06",
@@ -71,6 +73,8 @@ def analyze_code_changes(structured_diff_text: str) -> List[Dict]:
         ],
         response_format=ReviewModel,
     )
+
+    print("After API CALL...")
 
     # Parse and format the response
     response_pydantic= completion.choices[0].message.parsed
@@ -99,9 +103,5 @@ def analyze_code_changes(structured_diff_text: str) -> List[Dict]:
             "severity": step.severity
         }
         review_steps.append(step_dict)
-
-    # for review in review_steps:
-    #     print(review)
-    #     print("\n\n")
 
     return review_steps 
