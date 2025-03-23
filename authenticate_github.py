@@ -6,11 +6,22 @@ from github import Github, GithubIntegration
 
 
 APP_ID = os.environ.get("APP_ID")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
-PRIVATE_KEY_PATH = os.environ.get("PRIVATE_KEY_PATH")
+if not APP_ID:
+    raise ValueError("APP_ID not set")
 
-with open(PRIVATE_KEY_PATH) as fin:
-    private_key = fin.read()
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
+if not WEBHOOK_SECRET:
+    raise ValueError("WEBHOOK_SECRET not set")
+
+PRIVATE_KEY_PATH = os.environ.get("PRIVATE_KEY_PATH")
+if not PRIVATE_KEY_PATH:
+    raise ValueError("PRIVATE_KEY_PATH not set")
+
+try:
+    with open(PRIVATE_KEY_PATH) as fin:
+        private_key = fin.read()
+except FileNotFoundError:
+    raise FileNotFoundError("Private key file not found. Ensure PRIVATE_KEY_PATH is correctly set.")
 
 github_integration = GithubIntegration(APP_ID, private_key)
 
