@@ -1,5 +1,3 @@
-//main.py
-//also comment here
 import os
 import hmac
 import hashlib
