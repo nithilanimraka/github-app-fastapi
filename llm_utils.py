@@ -82,7 +82,7 @@ def analyze_code_changes(structured_diff_text: str) -> List[Dict]:
     for step in response_pydantic.steps:
 
         value1 = step.start_line_with_prefix
-        start_line = int(value1.replace("+", "").strip())  # Remove '+' and strip spaces
+        start_line = int(value1.replace("+", "").replace("-", "").strip())  # Remove '+' and strip spaces
 
         value2 = step.end_line_with_prefix
         end_line = int(value2.replace("+", "").replace("-", "").strip()) 
