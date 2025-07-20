@@ -77,7 +77,11 @@ async def webhook(request: Request, x_hub_signature: str = Header(None)):
                 )
 
                 # Analyze code changes (your existing function)
-                review_list = analyze_code_changes(structured_diff_text)
+                try:
+                    review_list = analyze_code_changes(structured_diff_text)
+                except Exception as e:
+                    print(f"Error during analyze_code_changes: {e}")
+                    raise
                 
                 # Update check run with results
                 update_check_run(
